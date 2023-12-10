@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+      }
+
+      .inputarea {
+    margin-top: 16%;
+    margin-left: 20%;
+    width: 100%;
+    display: grid;
+    justify-content: center;
+    position: relative;
+}
+
+      #pdfFrame {
+        border: none;
+        width: 50%;
+        height: 100vh;
+        position: absolute;
+        top: 43%;
+        left: 27%;
+        transform: translate(-50%, -40%);
+      }
+
+      button {
+        margin: 0 0 0 0.5rem;
+        padding: 0.5rem 1rem;
+        background-color: #3498db;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        border-radius: 3px;
+      }
+
+      input {
+        padding: 0.5rem;
+        margin-right: 0.5rem;
+      }
+
+input#lastPageInput {
+    width: 152%;
+    margin: 10px;
+}
+    </style>
+  </head>
+  <body>
+    <div class="inputarea class1">
+      <input type="file" accept=".pdf" name="pdfinput" id="pdfinput" />
+      <input type="text" id="lastPageInput" placeholder="e.g., 3 7 10 11 15" />
+      <button id="extractBtn">Extract</button>
+    </div>
+
+    <div class="class2">
+      <iframe frameborder="0" id="pdfFrame" frameborder="0" cellspacing="0"></iframe>
+    </div>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+    <script src="https://stuk.github.io/jszip/dist/jszip.js"></script>
+
+    <script>
+      const input = document.getElementById("pdfinput");
+      const pdfFrame = document.getElementById("pdfFrame");
+      const lastPageInput = document.getElementById("lastPageInput");
+      const extractBtn = document.getElementById("extractBtn");
+
+      let pdfArrayBuffer;
+
+      function readAsyncFile(file) {
+        return new Promise((resolve, reject) => {
+          let reader = new FileReader();
+          reader.onload = () => {
+            resolve(reader.result);
+          };
+          reader.onerror = reject;
+          reader.readAsArrayBuffer(file);
+        });
+      }
+
+      function renderPdf(arrayBuff) {
+        const tempblob = new Blob([new Uint8Array(arrayBuff)], {
+          type: "application/pdf",
+        });
+        const docUrl = URL.createObjectURL(tempblob);
+        pdfFrame.src = docUrl;
+      }
+
+      function range(start, end) {
+        let length = end - start + 1;
+        return Array.from({ length }, (_, i) => start + i - 1);
+      }
+
+      function createZip() {
+        const zip = new JSZip();
+        const originalPdfName = input.files[0].name.replace(/\.[^/.]+$/, ""); // Extract original PDF name without extension
+        const lastPages = lastPageInput.value.split(" ").map(Number);
+
+        return Promise.all(
+          lastPages.map(async (endPage, index) => {
+            const startPage = index > 0 ? lastPages[index - 1] + 1 : 1;
+            const pdfSrcDoc = await PDFLib.PDFDocument.load(pdfArrayBuffer);
+            const pdfNewDoc = await PDFLib.PDFDocument.create();
+            const pages = await pdfNewDoc.copyPages(pdfSrcDoc, range(startPage, endPage));
+            pages.forEach((page) => pdfNewDoc.addPage(page));
+            const newpdf = await pdfNewDoc.save();
+            const extractedPdfName = `${originalPdfName}_pages_${startPage}-${endPage}.pdf`;
+            zip.file(extractedPdfName, newpdf);
+          })
+        ).then(() => zip);
+      }
+
+      input.addEventListener("change", async (e) => {
+        const files = e.target.files;
+        if (files.length > 0) {
+          pdfArrayBuffer = await readAsyncFile(files[0]);
+          renderPdf(pdfArrayBuffer);
+        }
+      });
+
+      extractBtn.addEventListener("click", async () => {
+        const zip = await createZip();
+        const originalPdfName = input.files[0].name.replace(/\.[^/.]+$/, "");
+        zip.generateAsync({ type: "blob" }).then((content) => {
+          saveAs(content, `${originalPdfName}.zip`);
+        });
+      });
+    </script>
+  </body>
+</html>
